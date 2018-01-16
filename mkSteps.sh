@@ -4,42 +4,59 @@ maximumNumberOfPages=0
 
 count=0
 
+read -p "Name of pdf? " name
+
 echo "Fetch pdfs from git ..."
 
 for f in $(git log --pretty=format:"%H"); do
 
-	git show ${f}:milestone.pdf > milestone_v${count}.pdf
-	numberOfPages=$(pdfinfo milestone_v${count}.pdf | grep "Pages" | awk '{print $2}')
-	echo "Commit #$count: $f, $numberOfPages pages."
+	numberOfPages=
 
-	if [ $numberOfPages -gt $maximumNumberOfPages ]; then
-		maximumNumberOfPages=$numberOfPages
-	fi
+	git show ${f}:$name > milestone_v${count}.pdf
 	
-	((count++))
+	if [ $? -ne 0 ]; then
+		continue
+	fi
+
+	numberOfPages=$(pdfinfo milestone_v${count}.pdf 2>/dev/null | grep "Pages" | awk '{print $2}')
+
+	if [ "$numberOfPages" -eq "$numberOfPages" ] 2>/dev/null; then
+	
+		echo "Commit #$count: $f, $numberOfPages pages."
+
+		if [ $numberOfPages -gt $maximumNumberOfPages ]; then
+			maximumNumberOfPages=$numberOfPages
+		fi
+	
+		((count++))
+	fi
 done
 
 numberOfSteps=$count
 
-tx=10
-ty=10
+confirm=false
 
-if [ $maximumNumberOfPages -le 20 ]; then 
-	tx=5
-	ty=4
-elif [ $maximumNumberOfPages -le 25 ]; then
-	tx=5
-	ty=5
-elif [ $maximumNumberOfPages -le 30 ]; then
-	tx=6
-	ty=5
-elif [ $maximumNumberOfPages -le 36 ]; then
-	tx=6
-	ty=6
-elif [ $maximumNumberOfPages -le 42 ]; then
-	tx=7
-	ty=6
-fi
+echo "There is a maximum of $maximumNumberOfPages to display. Please enter a tile setup)"
+
+while [ $confirm != true ]; do
+
+	answer="M"
+
+	read -p "Number of pages in a row: " tx
+	read -p "Number of pages in a column: " ty
+
+	if [ $(($tx*$ty)) -lt $maximumNumberOfPages ]; then
+		echo "The setup you have choosen doesn't support the maximum number of pages."
+		while [[ $answer != "Y" && $answer != "N" ]]; do
+			read -p "Continue? [Y/N] " answer
+		done
+		if [ $answer = "Y" ]; then
+			confirm=true
+		fi
+	else
+		confirm=true
+	fi
+done
 
 echo "Setup for final page: ${tx}x${ty} tiles. Extract and merge slides..."
 
@@ -55,5 +72,9 @@ done
 
 echo "Create animation..."
 
-convert -delay 50 -loop 1 $(ls -1vr step_v*) steps.gif
+read -p "Time between timesteps? [integer] " dt
+
+convert -delay $dt -loop 1 $(ls -1vr step_v*) steps.gif
 rm step_v*
+
+echo "Output was written to steps.gif!"
